@@ -216,6 +216,30 @@
     bubbleEl.innerHTML = DOMPurify.sanitize(rawHtml, {
       ADD_ATTR: ["target"], // allow links to open in a new tab
     });
+    // Render LaTeX math expressions
+    renderLatexInto(bubbleEl);
+  }
+
+  /**
+   * Finds and renders LaTeX expressions (both inline $...$ and display $$...$$)
+   * using KaTeX within the given element.
+   */
+  function renderLatexInto(element) {
+    if (window.renderMathInElement) {
+      try {
+        renderMathInElement(element, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },  // display math
+            { left: "$", right: "$", display: false },   // inline math
+            { left: "\\(", right: "\\)", display: false },
+            { left: "\\[", right: "\\]", display: true },
+          ],
+          throwOnError: false,
+        });
+      } catch (err) {
+        console.warn("LaTeX rendering error:", err);
+      }
+    }
   }
 
   /**
@@ -241,6 +265,8 @@
       copyBtn.addEventListener("click", () => copyCode(codeEl, copyBtn));
       wrapper.appendChild(copyBtn);
     });
+    // Re-render LaTeX after decorating code blocks
+    renderLatexInto(bubbleEl);
   }
 
   async function copyCode(codeEl, btn) {
