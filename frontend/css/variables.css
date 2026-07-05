@@ -1,0 +1,47 @@
+/**
+ * Nova design tokens.
+ * A warm off-white base (not stark #FFF) with a single, confident
+ * signal-red accent. Everything else in the UI derives from these.
+ */
+:root {
+  /* ---- Color ---- */
+  --white:        #FFFFFF;
+  --paper:         #FBFAF9;   /* section backgrounds, slightly warm */
+  --ink:           #16130F;   /* near-black text, warm not blue-black */
+  --ink-soft:      #6B6560;   /* secondary text */
+  --hairline:      #ECE7E3;   /* borders, dividers */
+  --hairline-strong:#DFD8D2;
+
+  --nova-red:      #E31934;   /* primary accent */
+  --nova-red-deep: #A80F22;   /* pressed / gradient end */
+  --nova-red-glow: #FF6B7A;   /* highlight / glow edge */
+  --nova-red-tint: #FDEDEF;   /* very light red wash for surfaces */
+
+  /* ---- Type ---- */
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+  --font-body:     "Inter", -apple-system, sans-serif;
+  --font-mono:     "IBM Plex Mono", "SFMono-Regular", monospace;
+
+  /* ---- Elevation / shape ---- */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  --shadow-soft: 0 1px 2px rgba(20, 15, 10, 0.04), 0 8px 24px rgba(20, 15, 10, 0.06);
+  --shadow-lifted: 0 4px 10px rgba(20, 15, 10, 0.06), 0 20px 48px rgba(163, 15, 30, 0.10);
+
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 160ms;
+  --dur-med: 420ms;
+  --dur-slow: 900ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

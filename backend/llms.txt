@@ -1,0 +1,35 @@
+# NVIDIA API Catalog
+
+> NVIDIA NIM ΓÇö hosted, OpenAI-compatible model APIs for inference, vision, speech, retrieval, and more.
+
+## Getting Started
+
+All NVIDIA NIM APIs share a common base URL and auth scheme:
+
+- **Base URL:** `https://integrate.api.nvidia.com/v1`
+- **Auth:** Bearer token via `Authorization: Bearer $NVIDIA_API_KEY`
+- **API Key:** Generate one at https://build.nvidia.com/settings
+
+Example request:
+```bash
+curl https://integrate.api.nvidia.com/v1/chat/completions \
+  -H "Authorization: Bearer $NVIDIA_API_KEY" \
+  -d '{"model":"nvidia/llama-3.1-70b-instruct","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+## Catalog
+
+- [Models](/models.md) ΓÇö NIM model APIs (LLMs, vision, speech, retrieval, and more)
+- [Blueprints](/blueprints.md) ΓÇö reference architectures and workflows
+- [Skills](/skills.md) ΓÇö prebuilt agent skills
+
+## FAQ
+
+**Which models are free?**
+All models offer a free trial tier with no credit card required. Sign in to generate an API key.
+
+**Which models are OpenAI API compatible?**
+All NIM model endpoints at `integrate.api.nvidia.com/v1` implement the OpenAI Chat Completions API. Point an existing OpenAI SDK client at `https://integrate.api.nvidia.com/v1` and set the model name.
+
+**How do I filter models by task type?**
+Fetch /models.md ΓÇö it lists all models with descriptions and supports `?page=N` for pagination.

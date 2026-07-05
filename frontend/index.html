@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nova — An AI that thinks clearly</title>
+<meta name="description" content="Nova is a minimalist AI chat assistant powered by NVIDIA's Mistral Nemo model." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/variables.css" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- ============== NAV ============== -->
+<header class="nav">
+  <div class="wrap">
+    <a href="index.html" class="nav__brand">
+      <span class="nova-mark" aria-hidden="true">
+        <span class="nova-mark__ray"></span>
+        <span class="nova-mark__ray"></span>
+        <span class="nova-mark__ray"></span>
+        <span class="nova-mark__ray"></span>
+        <span class="nova-mark__core"></span>
+      </span>
+      <span class="wordmark">Nova</span>
+    </a>
+    <nav class="nav__links">
+      <a href="#features">How it thinks</a>
+      <a href="#showcase">Preview</a>
+      <a href="chat.html" class="btn btn-primary">
+        Launch Nova <span class="btn__arrow" aria-hidden="true">→</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<!-- ============== HERO ============== -->
+<section class="hero">
+  <div class="hero__glow" aria-hidden="true"></div>
+  <div class="wrap">
+    <p class="eyebrow hero__eyebrow" data-reveal>
+      <span aria-hidden="true">●</span> Powered by Mistral and Pacify intelligence
+    </p>
+    <h1 data-reveal>
+      A quiet mind for <span class="accent">loud</span> questions.
+    </h1>
+    <p class="hero__sub" data-reveal>
+      Nova is a minimalist AI assistant built for clear thinking — no clutter,
+      no noise. Ask, and it answers with precision, structure, and just
+      enough personality.
+    </p>
+    <div class="hero__actions" data-reveal>
+      <a href="chat.html" class="btn btn-primary">
+        Start a conversation <span class="btn__arrow" aria-hidden="true">→</span>
+      </a>
+      <a href="#showcase" class="btn btn-ghost">See it in action</a>
+    </div>
+
+    <div class="hero__meta" data-reveal>
+      <div class="hero__meta-item">
+        <span class="num">12B</span>
+        <span class="label">parameter Mistral Nemo model</span>
+      </div>
+      <div class="hero__meta-item">
+        <span class="num">&lt;1s</span>
+        <span class="label">to first token, streamed live</span>
+      </div>
+      <div class="hero__meta-item">
+        <span class="num">100%</span>
+        <span class="label">Markdown-rendered replies</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FEATURES ============== -->
+<section class="features" id="features">
+  <div class="wrap">
+    <div class="features__head">
+      <p class="eyebrow">How Nova thinks</p>
+      <h2>Three principles behind every reply.</h2>
+    </div>
+
+    <div class="features__grid">
+      <article class="feature-card">
+        <div class="feature-card__icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>
+        </div>
+        <h3>Streamed, not stalled</h3>
+        <p>Responses render token-by-token as Nova thinks, so you're never staring at a blank screen waiting for an answer.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card__icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h16"/></svg>
+        </div>
+        <h3>Structured by default</h3>
+        <p>Headings, lists, and code blocks are rendered cleanly from Markdown — Nova writes like a person who edits their own drafts.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card__icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 12h6"/></svg>
+        </div>
+        <h3>Nothing hidden</h3>
+        <p>One page, one purpose. No dashboards, no settings maze — just you, a prompt, and a considered answer.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============== SHOWCASE ============== -->
+<section class="showcase" id="showcase">
+  <div class="wrap">
+    <div class="showcase__copy">
+      <p class="eyebrow">Preview</p>
+      <h2>An interface that gets out of your way.</h2>
+      <p>
+        The chat page keeps its focus on the conversation: a single
+        input, a clean transcript, and Markdown rendered the moment
+        it arrives — bold, code, lists, and all.
+      </p>
+      <ul class="showcase__list">
+        <li>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 12l5 5L20 6"/></svg>
+          Live token streaming with a typing indicator
+        </li>
+        <li>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 12l5 5L20 6"/></svg>
+          Full Markdown — headings, tables, fenced code
+        </li>
+        <li>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 12l5 5L20 6"/></svg>
+          One-click copy on every code block
+        </li>
+      </ul>
+      <a href="chat.html" class="btn btn-primary">
+        Open the chat <span class="btn__arrow" aria-hidden="true">→</span>
+      </a>
+    </div>
+
+    <div class="mock-chat" aria-hidden="true">
+      <div class="mock-chat__bar">
+        <span class="mock-chat__dot"></span><span class="mock-chat__dot"></span><span class="mock-chat__dot"></span>
+      </div>
+      <div class="mock-chat__body">
+        <div class="mock-bubble mock-bubble--user">What's the fastest way to sort a list in Python?</div>
+        <div class="mock-bubble mock-bubble--ai"><code>sorted(list)</code> for a new list, or <code>list.sort()</code> to sort in place — both use Timsort, O(n log n).</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== CTA ============== -->
+<section>
+  <div class="cta-band">
+    <h2>Your next question deserves a clear answer.</h2>
+    <a href="chat.html" class="btn btn-primary">
+      Launch Nova <span class="btn__arrow" aria-hidden="true">→</span>
+    </a>
+  </div>
+</section>
+
+<!-- ============== FOOTER ============== -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer__brand">
+      <span class="nova-mark" style="--size:18px;" aria-hidden="true">
+        <span class="nova-mark__ray"></span><span class="nova-mark__ray"></span>
+        <span class="nova-mark__ray"></span><span class="nova-mark__ray"></span>
+        <span class="nova-mark__core"></span>
+      </span>
+      <span class="wordmark" style="font-size:15px;">Nova</span>
+      <img class="footer__logo" src="assets/Logo_2.png" alt="Pacify logo" />
+    </div>
+    <p>Built with Pacify intelligence &amp; NVIDIA Mistral Nemo.</p>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+</body>
+</html>
