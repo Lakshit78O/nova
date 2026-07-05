@@ -212,7 +212,7 @@ async function* streamNovaResponse(chatHistory) {
     model: MODEL_NAME,
     temperature: 0.6,
     topP: 0.9,
-    maxTokens: 1024,
+    maxTokens: 2054,
   });
   const parser = new StringOutputParser();
 
