@@ -212,12 +212,57 @@
    * streaming, so it stays cheap (no fixed-size buffers, direct innerHTML).
    */
   function renderMarkdownInto(bubbleEl, markdownText) {
-    const rawHtml = marked.parse(markdownText);
+    const normalizedMarkdown = autoWrapBareLatex(markdownText);
+    const rawHtml = marked.parse(normalizedMarkdown);
     bubbleEl.innerHTML = DOMPurify.sanitize(rawHtml, {
       ADD_ATTR: ["target"], // allow links to open in a new tab
     });
     // Render LaTeX math expressions
     renderLatexInto(bubbleEl);
+  }
+
+  function autoWrapBareLatex(markdownText) {
+    const lines = markdownText.split("\n");
+    let inFence = false;
+    const fencedPattern = /^(```|~~~)/;
+    const latexLinePattern = /\\[A-Za-z]+|\^\{?|_[A-Za-z0-9\{]|\\(?:frac|sqrt|Rightarrow|Leftarrow|implies|rightarrow|leftarrow|cdot|times|pm|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|pi|sigma|phi|omega|sum|int|lim|infty|le|ge|neq)\b/;
+
+    const result = [];
+
+    for (const line of lines) {
+      if (fencedPattern.test(line)) {
+        inFence = !inFence;
+        result.push(line);
+        continue;
+      }
+
+      if (inFence) {
+        result.push(line);
+        continue;
+      }
+
+      const trimmed = line.trim();
+      if (!trimmed) {
+        result.push(line);
+        continue;
+      }
+
+      // Skip lines already wrapped in standard math delimiters.
+      if (trimmed.startsWith("$$") || trimmed.startsWith("$") || trimmed.startsWith("\\(") || trimmed.startsWith("\\[")) {
+        result.push(line);
+        continue;
+      }
+
+      if (latexLinePattern.test(line) && !/\$/.test(line)) {
+        const cleaned = trimmed.replace(/\\\s*$/, "");
+        result.push(`$$\n${cleaned}\n$$`);
+        continue;
+      }
+
+      result.push(line);
+    }
+
+    return result.join("\n");
   }
 
   /**
