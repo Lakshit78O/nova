@@ -214,11 +214,27 @@
   function renderMarkdownInto(bubbleEl, markdownText) {
     const normalizedMarkdown = autoWrapBareLatex(markdownText);
     const rawHtml = marked.parse(normalizedMarkdown);
-    bubbleEl.innerHTML = DOMPurify.sanitize(rawHtml, {
-      ADD_ATTR: ["target"], // allow links to open in a new tab
+    const mathHtml = renderMathHtml(rawHtml);
+    bubbleEl.innerHTML = DOMPurify.sanitize(mathHtml, {
+      ADD_ATTR: ["target", "class", "style", "aria-hidden", "role"],
     });
-    // Render LaTeX math expressions
     renderLatexInto(bubbleEl);
+  }
+
+  function renderMathHtml(html) {
+    if (!window.katex) return html;
+
+    return html.replace(/\$\$([\s\S]+?)\$\$|(?<!\$)\$([^\n$]+?)\$(?!\$)/g, (match, displayMath, inlineMath) => {
+      const source = displayMath ?? inlineMath;
+      try {
+        return katex.renderToString(source.trim(), {
+          displayMode: Boolean(displayMath),
+          throwOnError: false,
+        });
+      } catch (err) {
+        return match;
+      }
+    });
   }
 
   function autoWrapBareLatex(markdownText) {
@@ -270,21 +286,43 @@
    * using KaTeX within the given element.
    */
   function renderLatexInto(element) {
-    if (window.renderMathInElement) {
+    if (!window.renderMathInElement) return;
+
+    // Only render math in text nodes outside code/pre blocks.
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.nodeValue || !node.nodeValue.includes("$")) return NodeFilter.FILTER_REJECT;
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        if (parent.closest("pre, code")) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+    textNodes.forEach((textNode) => {
+      const wrapper = document.createElement("span");
+      wrapper.textContent = textNode.nodeValue;
       try {
-        renderMathInElement(element, {
+        renderMathInElement(wrapper, {
           delimiters: [
-            { left: "$$", right: "$$", display: true },  // display math
-            { left: "$", right: "$", display: false },   // inline math
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
             { left: "\\(", right: "\\)", display: false },
             { left: "\\[", right: "\\]", display: true },
           ],
           throwOnError: false,
+          ignoredTags: ["script", "noscript", "style", "textarea", "code", "pre"],
         });
+        if (wrapper.innerHTML !== textNode.nodeValue) {
+          textNode.parentNode.replaceChild(wrapper, textNode);
+        }
       } catch (err) {
-        console.warn("LaTeX rendering error:", err);
+        // leave the original text if KaTeX rendering fails
       }
-    }
+    });
   }
 
   /**
