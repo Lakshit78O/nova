@@ -212,13 +212,19 @@
    * streaming, so it stays cheap (no fixed-size buffers, direct innerHTML).
    */
   function renderMarkdownInto(bubbleEl, markdownText) {
-    const normalizedMarkdown = autoWrapBareLatex(markdownText);
+    const normalizedMarkdown = normalizeHtmlTags(autoWrapBareLatex(markdownText));
     const rawHtml = marked.parse(normalizedMarkdown);
     const mathHtml = renderMathHtml(rawHtml);
     bubbleEl.innerHTML = DOMPurify.sanitize(mathHtml, {
       ADD_ATTR: ["target", "class", "style", "aria-hidden", "role"],
     });
     renderLatexInto(bubbleEl);
+  }
+
+  function normalizeHtmlTags(markdownText) {
+    return markdownText
+      .replace(/<\s*(\/?)\s*(br)\s*(\/?)\s*>/gi, "<br>")
+      .replace(/<\s*(\/?)\s*(p|ul|ol|li|strong|em|sub|sup|span|b|i|u|code|pre|blockquote|h[1-6])\b([^>]*)\s*>/gi, "<$1$2$3>");
   }
 
   function renderMathHtml(html) {
