@@ -222,9 +222,26 @@
   }
 
   function normalizeHtmlTags(markdownText) {
-    return markdownText
-      .replace(/<\s*(\/?)\s*(br)\s*(\/?)\s*>/gi, "<br>")
-      .replace(/<\s*(\/?)\s*(p|ul|ol|li|strong|em|sub|sup|span|b|i|u|code|pre|blockquote|h[1-6])\b([^>]*)\s*>/gi, "<$1$2$3>");
+    const allowedTags = new Set([
+      "br", "p", "ul", "ol", "li", "strong", "em", "sub", "sup",
+      "span", "b", "i", "u", "code", "pre", "blockquote",
+      "h1", "h2", "h3", "h4", "h5", "h6",
+    ]);
+    // Normalize allowed tags (e.g. convert `< br >` to `<br>`) and
+    // escape any disallowed tags so they render as literal text.
+    return markdownText.replace(/<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/)??\s*>/g, (match, slash, tag, selfClose) => {
+      const normalizedTag = tag.toLowerCase();
+      // If tag is allowed, return a minimal, normalized form without attributes.
+      if (allowedTags.has(normalizedTag)) {
+        if (selfClose) return `<${slash}${normalizedTag}/>`;
+        return `<${slash}${normalizedTag}>`;
+      }
+
+      // Otherwise escape the angle brackets so the raw text is visible
+      // instead of being interpreted as HTML. This fixes cases where
+      // the model returns things like `< br >` or `< /strong >`.
+      return match.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    });
   }
 
   function renderMathHtml(html) {
