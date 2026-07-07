@@ -227,21 +227,42 @@
       "span", "b", "i", "u", "code", "pre", "blockquote",
       "h1", "h2", "h3", "h4", "h5", "h6",
     ]);
-    // Normalize allowed tags (e.g. convert `< br >` to `<br>`) and
-    // escape any disallowed tags so they render as literal text.
-    return markdownText.replace(/<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/)??\s*>/g, (match, slash, tag, selfClose) => {
-      const normalizedTag = tag.toLowerCase();
-      // If tag is allowed, return a minimal, normalized form without attributes.
+
+    // Work on a copy so we can apply multiple passes.
+    let text = markdownText;
+
+    // Normalize common line-breaking tags into newlines so they don't
+    // appear verbatim as `< br >` in output.
+    text = text.replace(/<\s*br\s*\/?\s*>/gi, "\n");
+
+    // Turn list fragments into Markdown-like list lines. This helps when
+    // the model emits stray list tags instead of proper Markdown.
+    text = text.replace(/<\s*li[^>]*>/gi, "\n- ");
+    text = text.replace(/<\s*\/\s*li\s*>/gi, "");
+    text = text.replace(/<\s*(ul|ol)[^>]*>/gi, "\n");
+    text = text.replace(/<\s*\/\s*(ul|ol)\s*>/gi, "\n");
+
+    // Normalize or escape any remaining angle-bracket tags. Keep allowed
+    // tags in a minimal normalized form; escape unknown ones and pad
+    // with spaces so removing them doesn't glue words together.
+    text = text.replace(/<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*?(\/)??\s*>/g, (match, slash, tag, selfClose) => {
+      const normalizedTag = String(tag).toLowerCase();
       if (allowedTags.has(normalizedTag)) {
+        if (normalizedTag === 'br') return '\n';
+        if (normalizedTag === 'li') return (slash ? '' : '\n- ');
         if (selfClose) return `<${slash}${normalizedTag}/>`;
         return `<${slash}${normalizedTag}>`;
       }
 
-      // Otherwise escape the angle brackets so the raw text is visible
-      // instead of being interpreted as HTML. This fixes cases where
-      // the model returns things like `< br >` or `< /strong >`.
-      return match.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      // Escape and pad unknown tags to avoid concatenating surrounding words.
+      const escaped = match.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return ` ${escaped} `;
     });
+
+    // Collapse excessive blank lines and trim trailing whitespace on lines.
+    text = text.replace(/\n{3,}/g, "\n\n");
+    text = text.replace(/[ \t]+\n/g, "\n");
+    return text;
   }
 
   function renderMathHtml(html) {
@@ -294,7 +315,9 @@
 
       if (latexLinePattern.test(line) && !/\$/.test(line)) {
         const cleaned = trimmed.replace(/\\\s*$/, "");
-        result.push(`$$\n${cleaned}\n$$`);
+        // Surround display math with blank lines to avoid it joining
+        // with surrounding text once KaTeX renders it.
+        result.push(`\n$$\n${cleaned}\n$$\n`);
         continue;
       }
 
