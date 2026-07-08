@@ -222,41 +222,24 @@
   }
 
   function normalizeHtmlTags(markdownText) {
-    const allowedTags = new Set([
-      "br", "p", "ul", "ol", "li", "strong", "em", "sub", "sup",
-      "span", "b", "i", "u", "code", "pre", "blockquote",
-      "h1", "h2", "h3", "h4", "h5", "h6",
-    ]);
-
-    // Work on a copy so we can apply multiple passes.
     let text = markdownText;
 
-    // Normalize common line-breaking tags into newlines so they don't
-    // appear verbatim as `< br >` in output.
+    // Normalize line breaks and block-like tags into whitespace/newlines.
     text = text.replace(/<\s*br\s*\/?\s*>/gi, "\n");
+    text = text.replace(/<\s*(?:p|div|section|article|blockquote|h[1-6]|ul|ol|li|table|tr|td|th)[^>]*>/gi, "\n");
+    text = text.replace(/<\s*\/\s*(?:p|div|section|article|blockquote|h[1-6]|ul|ol|li|table|tr|td|th)\s*>/gi, "\n");
 
-    // Turn list fragments into Markdown-like list lines. This helps when
-    // the model emits stray list tags instead of proper Markdown.
-    text = text.replace(/<\s*li[^>]*>/gi, "\n- ");
-    text = text.replace(/<\s*\/\s*li\s*>/gi, "");
-    text = text.replace(/<\s*(ul|ol)[^>]*>/gi, "\n");
-    text = text.replace(/<\s*\/\s*(ul|ol)\s*>/gi, "\n");
+    // Remove any remaining HTML tags entirely, preserving whitespace.
+    text = text.replace(/<[^>]+>/g, " ");
 
-    // Normalize or escape any remaining angle-bracket tags. Keep allowed
-    // tags in a minimal normalized form; escape unknown ones and pad
-    // with spaces so removing them doesn't glue words together.
-    text = text.replace(/<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*?(\/)??\s*>/g, (match, slash, tag, selfClose) => {
-      const normalizedTag = String(tag).toLowerCase();
-      if (allowedTags.has(normalizedTag)) {
-        if (normalizedTag === 'br') return '\n';
-        if (normalizedTag === 'li') return (slash ? '' : '\n- ');
-        if (selfClose) return `<${slash}${normalizedTag}/>`;
-        return `<${slash}${normalizedTag}>`;
-      }
-
-      // Escape and pad unknown tags to avoid concatenating surrounding words.
-      const escaped = match.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      return ` ${escaped} `;
+    // Collapse whitespace and clean up newlines.
+    text = text.replace(/\r\n?/g, "\n");
+    text = text.replace(/[ \t]+/g, " ");
+    text = text.replace(/\n{3,}/g, "\n\n");
+    text = text.replace(/\n[ \t]+/g, "\n");
+    text = text.replace(/[ \t]+\n/g, "\n");
+    return text.trim();
+  }
     });
 
     // Collapse excessive blank lines and trim trailing whitespace on lines.
