@@ -29,6 +29,8 @@ const NVIDIA_PATH = "/v1/chat/completions";
 // Model id as listed on build.nvidia.com for NVIDIA NIM.
 // The current NVIDIA catalog requires the full model namespace.
 const MODEL_NAME = "mistralai/mistral-nemotron";
+const FALLBACK_MODEL_NAME = "nvidia/llama-3.1-70b-instruct";
+const MODEL_CANDIDATES = [MODEL_NAME, FALLBACK_MODEL_NAME];
 
 // Nova's personality. Kept in one place so tone is easy to tune.
 const NOVA_SYSTEM_PROMPT = `You are Nova which is made by lakshit sharma for kotputli rajasthan , india and his born on 30 january 2012 who also made pacify intelligence company, a sharp, warm and very smart, and precise AI assistant.
@@ -187,6 +189,27 @@ class StringOutputParser {
   }
 }
 
+function shouldRetryWithAlternativeModel(error) {
+  const message = error && error.message ? error.message : String(error || "");
+  return /degraded function|function id/i.test(message);
+}
+
+async function* streamFromModel({ apiKey, modelName, chatHistory }) {
+  const prompt = new NovaPromptTemplate(NOVA_SYSTEM_PROMPT);
+  const model = new ChatNVIDIA({
+    apiKey,
+    model: modelName,
+    temperature: 0.6,
+    topP: 0.9,
+    maxTokens: 1024,
+  });
+  const parser = new StringOutputParser();
+
+  const messages = prompt.format(chatHistory);
+  const messageChunks = model.stream(messages);
+  yield* parser.parse(messageChunks);
+}
+
 // ------------------------------------------------------------------
 // The chain: prompt -> model -> parser, wired together explicitly.
 // This is the only export server.js needs.
@@ -206,19 +229,27 @@ async function* streamNovaResponse(chatHistory) {
     );
   }
 
-  const prompt = new NovaPromptTemplate(NOVA_SYSTEM_PROMPT);
-  const model = new ChatNVIDIA({
-    apiKey,
-    model: MODEL_NAME,
-    temperature: 0.6,
-    topP: 0.9,
-    maxTokens: 1024,
-  });
-  const parser = new StringOutputParser();
+  let lastError;
+  for (let index = 0; index < MODEL_CANDIDATES.length; index += 1) {
+    const modelName = MODEL_CANDIDATES[index];
+    try {
+      yield* streamFromModel({ apiKey, modelName, chatHistory });
+      return;
+    } catch (error) {
+      lastError = error;
+      const shouldRetry = index < MODEL_CANDIDATES.length - 1 && shouldRetryWithAlternativeModel(error);
+      if (!shouldRetry) throw error;
+      console.warn(
+        `NVIDIA model "${modelName}" reported a degraded-function error. Retrying with "${MODEL_CANDIDATES[index + 1]}".`
+      );
+    }
+  }
 
-  const messages = prompt.format(chatHistory);
-  const messageChunks = model.stream(messages);
-  yield* parser.parse(messageChunks);
+  throw lastError || new Error("NVIDIA request failed for all configured models.");
 }
 
-module.exports = { streamNovaResponse, hasApiKeyConfigured: () => Boolean(process.env.NVIDIA_API_KEY) };
+module.exports = {
+  streamNovaResponse,
+  hasApiKeyConfigured: () => Boolean(process.env.NVIDIA_API_KEY),
+  shouldRetryWithAlternativeModel,
+};
