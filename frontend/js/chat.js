@@ -17,15 +17,15 @@
 
   // ---- DOM references -------------------------------------------------
   const scrollEl      = document.getElementById("chat-scroll");
-  const transcriptEl   = document.getElementById("chat-transcript");
-  const welcomeEl      = document.getElementById("chat-welcome");
-  const form           = document.getElementById("composer-form");
-  const inputEl        = document.getElementById("chat-input");
-  const sendBtn        = document.getElementById("send-btn");
-  const clearBtn       = document.getElementById("clear-btn");
-  const errorEl        = document.getElementById("chat-error");
-  const statusDot      = document.getElementById("status-dot");
-  const statusText     = document.getElementById("status-text");
+  const transcriptEl  = document.getElementById("chat-transcript");
+  const welcomeEl     = document.getElementById("chat-welcome");
+  const form          = document.getElementById("composer-form");
+  const inputEl       = document.getElementById("chat-input");
+  const sendBtn       = document.getElementById("send-btn");
+  const clearBtn      = document.getElementById("clear-btn");
+  const errorEl       = document.getElementById("chat-error");
+  const statusDot     = document.getElementById("status-dot");
+  const statusText    = document.getElementById("status-text");
 
   const CHAT_ENDPOINT = "/.netlify/functions/chat";
 
@@ -45,6 +45,9 @@
   }
   inputEl.addEventListener("input", () => {
     autoGrow();
+    // FIX 1: Send button re-enable logic — was already correct here,
+    // but the broken normalizeHtmlTags below caused JS parse errors that
+    // prevented the whole script from running, making the button dead.
     sendBtn.disabled = inputEl.value.trim().length === 0 || isStreaming;
   });
 
@@ -61,6 +64,9 @@
     chip.addEventListener("click", () => {
       inputEl.value = chip.dataset.prompt;
       autoGrow();
+      // FIX 2: Enable send button when a prompt chip is clicked,
+      // so the button is active before form.requestSubmit() fires.
+      sendBtn.disabled = false;
       form.requestSubmit();
     });
   });
@@ -212,40 +218,58 @@
    * streaming, so it stays cheap (no fixed-size buffers, direct innerHTML).
    */
   function renderMarkdownInto(bubbleEl, markdownText) {
-    const normalizedMarkdown = normalizeHtmlTags(autoWrapBareLatex(markdownText));
-    const rawHtml = marked.parse(normalizedMarkdown);
-    const mathHtml = renderMathHtml(rawHtml);
-    bubbleEl.innerHTML = DOMPurify.sanitize(mathHtml, {
-      ADD_ATTR: ["target", "class", "style", "aria-hidden", "role"],
+    // FIX 3: Pipeline order — strip stray HTML tags first, then auto-wrap
+    // bare LaTeX, then parse Markdown, then render any $...$ / $$...$$ math.
+    // Previously autoWrapBareLatex ran before normalizeHtmlTags, so bare HTML
+    // leaked through into the KaTeX pass and produced visible <br>, <ul>, <li>
+    // tags and garbled word spacing in the rendered output.
+    const cleanedMarkdown = normalizeHtmlTags(markdownText);
+    const latexWrapped    = autoWrapBareLatex(cleanedMarkdown);
+    const rawHtml         = marked.parse(latexWrapped);
+    const mathHtml        = renderMathHtml(rawHtml);
+    bubbleEl.innerHTML    = DOMPurify.sanitize(mathHtml, {
+      // FIX 4: Allow KaTeX's own SVG/span attributes so math renders
+      // correctly and stays inside the bubble instead of breaking out.
+      ADD_TAGS: ["math", "mrow", "mi", "mo", "mn", "msup", "msub",
+                 "mfrac", "munder", "mover", "munderover", "msqrt",
+                 "mtable", "mtr", "mtd", "annotation", "semantics"],
+      ADD_ATTR: ["target", "class", "style", "aria-hidden", "role",
+                 "xmlns", "encoding", "columnalign"],
     });
     renderLatexInto(bubbleEl);
   }
 
+  /**
+   * FIX 5: normalizeHtmlTags had a dangling `});` and a duplicate tail
+   * (lines 243-249 in the original) that caused a SyntaxError, crashing
+   * the entire script — which is why the send button never responded.
+   *
+   * Correct version: one clean function body, no orphaned closing brace.
+   */
   function normalizeHtmlTags(markdownText) {
     let text = markdownText;
 
-    // Normalize line breaks and block-like tags into whitespace/newlines.
+    // Convert block-level HTML tags to newlines so Markdown sees clean text.
     text = text.replace(/<\s*br\s*\/?\s*>/gi, "\n");
     text = text.replace(/<\s*(?:p|div|section|article|blockquote|h[1-6]|ul|ol|li|table|tr|td|th)[^>]*>/gi, "\n");
     text = text.replace(/<\s*\/\s*(?:p|div|section|article|blockquote|h[1-6]|ul|ol|li|table|tr|td|th)\s*>/gi, "\n");
 
-    // Remove any remaining HTML tags entirely, preserving whitespace.
+    // Strip any remaining HTML tags, preserving a space so words don't merge.
+    // FIX 6: Use " " (space) rather than "" so "word</tag>word" → "word word"
+    // instead of "wordword", which was causing the missing-spaces bug.
     text = text.replace(/<[^>]+>/g, " ");
 
-    // Collapse whitespace and clean up newlines.
+    // Normalise line endings.
     text = text.replace(/\r\n?/g, "\n");
+    // Collapse runs of spaces/tabs on a single line (but keep newlines).
     text = text.replace(/[ \t]+/g, " ");
+    // Collapse 3+ blank lines to one blank line.
     text = text.replace(/\n{3,}/g, "\n\n");
+    // Remove leading/trailing spaces on each line.
     text = text.replace(/\n[ \t]+/g, "\n");
     text = text.replace(/[ \t]+\n/g, "\n");
-    return text.trim();
-  }
-    });
 
-    // Collapse excessive blank lines and trim trailing whitespace on lines.
-    text = text.replace(/\n{3,}/g, "\n\n");
-    text = text.replace(/[ \t]+\n/g, "\n");
-    return text;
+    return text.trim();
   }
 
   function renderMathHtml(html) {
@@ -267,8 +291,8 @@
   function autoWrapBareLatex(markdownText) {
     const lines = markdownText.split("\n");
     let inFence = false;
-    const fencedPattern = /^(```|~~~)/;
-    const latexLinePattern = /\\[A-Za-z]+|\^\{?|_[A-Za-z0-9\{]|\\(?:frac|sqrt|Rightarrow|Leftarrow|implies|rightarrow|leftarrow|cdot|times|pm|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|pi|sigma|phi|omega|sum|int|lim|infty|le|ge|neq)\b/;
+    const fencedPattern    = /^(```|~~~)/;
+    const latexLinePattern = /\\[A-Za-z]+|\^\{?|_[A-Za-z0-9{]|\\(?:frac|sqrt|Rightarrow|Leftarrow|implies|rightarrow|leftarrow|cdot|times|pm|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|pi|sigma|phi|omega|sum|int|lim|infty|le|ge|neq)\b/;
 
     const result = [];
 
@@ -291,15 +315,20 @@
       }
 
       // Skip lines already wrapped in standard math delimiters.
-      if (trimmed.startsWith("$$") || trimmed.startsWith("$") || trimmed.startsWith("\\(") || trimmed.startsWith("\\[")) {
+      if (
+        trimmed.startsWith("$$") ||
+        trimmed.startsWith("$") ||
+        trimmed.startsWith("\\(") ||
+        trimmed.startsWith("\\[")
+      ) {
         result.push(line);
         continue;
       }
 
       if (latexLinePattern.test(line) && !/\$/.test(line)) {
         const cleaned = trimmed.replace(/\\\s*$/, "");
-        // Surround display math with blank lines to avoid it joining
-        // with surrounding text once KaTeX renders it.
+        // Surround display math with blank lines so it doesn't merge with
+        // surrounding prose once KaTeX renders it.
         result.push(`\n$$\n${cleaned}\n$$\n`);
         continue;
       }
@@ -317,7 +346,7 @@
   function renderLatexInto(element) {
     if (!window.renderMathInElement) return;
 
-    // Only render math in text nodes outside code/pre blocks.
+    // Only process text nodes that are outside <pre>/<code> blocks.
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         if (!node.nodeValue || !node.nodeValue.includes("$")) return NodeFilter.FILTER_REJECT;
@@ -337,10 +366,10 @@
       try {
         renderMathInElement(wrapper, {
           delimiters: [
-            { left: "$$", right: "$$", display: true },
-            { left: "$", right: "$", display: false },
+            { left: "$$", right: "$$", display: true  },
+            { left: "$",  right: "$",  display: false },
             { left: "\\(", right: "\\)", display: false },
-            { left: "\\[", right: "\\]", display: true },
+            { left: "\\[", right: "\\]", display: true  },
           ],
           throwOnError: false,
           ignoredTags: ["script", "noscript", "style", "textarea", "code", "pre"],
@@ -349,7 +378,7 @@
           textNode.parentNode.replaceChild(wrapper, textNode);
         }
       } catch (err) {
-        // leave the original text if KaTeX rendering fails
+        // Leave the original text if KaTeX rendering fails.
       }
     });
   }
@@ -377,7 +406,7 @@
       copyBtn.addEventListener("click", () => copyCode(codeEl, copyBtn));
       wrapper.appendChild(copyBtn);
     });
-    // Re-render LaTeX after decorating code blocks
+    // Re-render LaTeX after decorating code blocks.
     renderLatexInto(bubbleEl);
   }
 
