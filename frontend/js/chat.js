@@ -229,11 +229,15 @@
     bubbleEl.innerHTML    = DOMPurify.sanitize(rawHtml, {
       // Allow KaTeX's span/classes and some mathml tags so math renders
       // correctly and stays inside the bubble instead of breaking out.
-      ADD_TAGS: ["math", "mrow", "mi", "mo", "mn", "msup", "msub",
-                 "mfrac", "munder", "mover", "munderover", "msqrt",
-                 "mtable", "mtr", "mtd", "annotation", "semantics", "span"],
+      ADD_TAGS: [
+        "math", "mrow", "mi", "mo", "mn", "msup", "msub",
+        "mfrac", "munder", "mover", "munderover", "msqrt",
+        "mtable", "mtr", "mtd", "annotation", "semantics", "span",
+        // Allow preview container elements so the LaTeX source preview isn't stripped
+        "details", "summary", "pre", "code", "br"
+      ],
       ADD_ATTR: ["target", "class", "style", "aria-hidden", "role",
-                 "xmlns", "encoding", "columnalign"],
+                 "xmlns", "encoding", "columnalign", "open"],
     });
     // If the original markdown contained LaTeX, add a small collapsible
     // preview showing the raw LaTeX source so users can inspect it.
