@@ -226,16 +226,17 @@
     const cleanedMarkdown = normalizeHtmlTags(markdownText);
     const latexWrapped    = autoWrapBareLatex(cleanedMarkdown);
     const rawHtml         = marked.parse(latexWrapped);
-    const mathHtml        = renderMathHtml(rawHtml);
-    bubbleEl.innerHTML    = DOMPurify.sanitize(mathHtml, {
-      // FIX 4: Allow KaTeX's own SVG/span attributes so math renders
+    bubbleEl.innerHTML    = DOMPurify.sanitize(rawHtml, {
+      // Allow KaTeX's span/classes and some mathml tags so math renders
       // correctly and stays inside the bubble instead of breaking out.
       ADD_TAGS: ["math", "mrow", "mi", "mo", "mn", "msup", "msub",
                  "mfrac", "munder", "mover", "munderover", "msqrt",
-                 "mtable", "mtr", "mtd", "annotation", "semantics"],
+                 "mtable", "mtr", "mtd", "annotation", "semantics", "span"],
       ADD_ATTR: ["target", "class", "style", "aria-hidden", "role",
                  "xmlns", "encoding", "columnalign"],
     });
+    // Render LaTeX in the sanitized DOM (use KaTeX's auto-render), rather
+    // than pre-rendering to HTML strings which can introduce stray tags.
     renderLatexInto(bubbleEl);
   }
 
@@ -272,21 +273,11 @@
     return text.trim();
   }
 
-  function renderMathHtml(html) {
-    if (!window.katex) return html;
-
-    return html.replace(/\$\$([\s\S]+?)\$\$|(?<!\$)\$([^\n$]+?)\$(?!\$)/g, (match, displayMath, inlineMath) => {
-      const source = displayMath ?? inlineMath;
-      try {
-        return katex.renderToString(source.trim(), {
-          displayMode: Boolean(displayMath),
-          throwOnError: false,
-        });
-      } catch (err) {
-        return match;
-      }
-    });
-  }
+  // NOTE: We intentionally removed the earlier `renderMathHtml` approach
+  // that pre-rendered KaTeX into the HTML string. That method could emit
+  // markup that then got sanitized or mixed with Markdown output, causing
+  // stray <br>, <ul>, <li> and spacing issues. Instead we sanitize first
+  // and then run KaTeX's `renderMathInElement` in `renderLatexInto`.
 
   function autoWrapBareLatex(markdownText) {
     const lines = markdownText.split("\n");
