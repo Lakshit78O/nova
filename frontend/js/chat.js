@@ -38,6 +38,21 @@
   // natural in chat than marked's default "one blank line = paragraph".
   marked.setOptions({ breaks: true, gfm: true });
 
+  // Shared by autoWrapBareLatex() and extractMath(): detects markdown
+  // bold/italic syntax, and picks out math-looking clauses (e.g.
+  // "f(x) = x^2 + 1", "y = 0") out of a larger run of prose. See FIX 8/9
+  // below for why both are needed.
+  const MD_EMPHASIS_PATTERN = /\*\*[^*\n]+\*\*|__[^_\n]+__/;
+  // A variable/function name, an optional "(...)" call, then one-or-more
+  // "<op> <token>" hops chained with =, ^, _, or +. Requires an explicit
+  // operator to trigger, so ordinary words ("is", "not", "well-known")
+  // never match — they have no = ^ _ + immediately following them.
+  // Each token is either a bracket-free run of letters/digits/^/_/./+/- or
+  // a real function call ("f(-1)") — never a bare "(" or ")" on its own,
+  // so a clause can't swallow a closing paren that actually belongs to
+  // surrounding prose, e.g. the "...)" in "(e.g., f(1) = f(-1) = 2)".
+  const INLINE_CLAUSE_PATTERN = /\b[A-Za-z](?:\([^()\n]{1,20}\))?(?:\s*[=^_+]\s*(?:[A-Za-z]\([^()\n]{1,20}\)|[A-Za-z0-9^_.+-]+))+/g;
+
   // ---- Textarea auto-grow ----------------------------------------------
   function autoGrow() {
     inputEl.style.height = "auto";
@@ -313,24 +328,40 @@
 
     const mathPattern = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$([^\n$]+?)\$/g;
 
+    const renderClause = (source, isDisplay) => {
+      let html;
+      try {
+        html = window.katex.renderToString(source, { displayMode: isDisplay, throwOnError: false });
+      } catch (err) {
+        return null; // leave the raw text if KaTeX chokes on it
+      }
+      const id = mathBlocks.length;
+      mathBlocks.push({ id, source, display: isDisplay, html });
+      return `<span class="math-placeholder" data-math-id="${id}"></span>`;
+    };
+
     masked = masked.replace(mathPattern, (match, dollarDisplay, bracketDisplay, parenInline, dollarInline) => {
       const isDisplay = dollarDisplay !== undefined || bracketDisplay !== undefined;
       const source = (dollarDisplay ?? bracketDisplay ?? parenInline ?? dollarInline ?? "").trim();
       if (!source) return match;
 
-      let html;
-      try {
-        html = window.katex.renderToString(source, {
-          displayMode: isDisplay,
-          throwOnError: false,
+      // FIX 9: a $$...$$ (or $...$) span whose "math" actually contains
+      // markdown bold/italic syntax isn't real LaTeX — it's prose that
+      // ended up between math delimiters, whether from the model's own
+      // output or from an earlier heuristic. This is the actual root
+      // cause behind the screenshot: rendering a span like "**b)** f(x) =
+      // x^2 + 1 is **not injective** ..." whole through KaTeX prints the
+      // literal ** markers instead of letting Markdown bold them. Salvage
+      // it: drop the outer delimiters, keep the prose/markdown as plain
+      // text, and only convert the genuine equation-like clauses inside
+      // (e.g. "f(x) = x^2 + 1", "y = 0") to inline math.
+      if (MD_EMPHASIS_PATTERN.test(source)) {
+        return source.replace(INLINE_CLAUSE_PATTERN, (clause) => {
+          return renderClause(clause.trim(), false) || clause;
         });
-      } catch (err) {
-        return match; // leave the raw text if KaTeX chokes on it
       }
 
-      const id = mathBlocks.length;
-      mathBlocks.push({ id, source, display: isDisplay, html });
-      return `<span class="math-placeholder" data-math-id="${id}"></span>`;
+      return renderClause(source, isDisplay) || match;
     });
 
     // Put the protected code snippets back.
@@ -395,9 +426,30 @@
   function autoWrapBareLatex(markdownText) {
     const lines = markdownText.split("\n");
     let inFence = false;
+    // FIX 9b: tracks whether we're inside a multi-line "$$" ... "$$" block
+    // the model already wrote itself (an opening "$$" alone on its own
+    // line, closed by a later standalone "$$"). Lines inside that block
+    // must NOT go through the per-line FIX-8 logic below — doing so
+    // double-wrapped inner clauses in their own "$...$", and since
+    // extractMath() later salvages the *whole* multi-line span at once,
+    // those inner "$" characters ended up as stray literal text instead of
+    // being consumed as delimiters. Content inside an explicit multi-line
+    // block is left completely untouched here; extractMath() handles it.
+    let inMathBlock = false;
     const fencedPattern    = /^(```|~~~)/;
     const latexLinePattern = /\\[A-Za-z]+|\^\{?|_[A-Za-z0-9{]|\\(?:frac|sqrt|Rightarrow|Leftarrow|implies|rightarrow|leftarrow|cdot|times|pm|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|pi|sigma|phi|omega|sum|int|lim|infty|le|ge|neq)\b/;
 
+    // FIX 8: a line like "**b)** f(x) = x^2 + 1 is **not injective** (e.g.,
+    // f(1) = f(-1) = 2) and **not surjective** (e.g., y = 0 has no
+    // pre-image)." was being swallowed *whole* into one $$...$$ block just
+    // because it contained a LaTeX-ish fragment like "x^2". KaTeX then
+    // rendered the literal "**b)**" / "**not injective**" markers as plain
+    // text instead of letting Markdown turn them into bold — the exact bug
+    // in the screenshot. A line containing markdown bold/italic markers is
+    // now left for Markdown to handle; only the specific equation-like
+    // clauses inside it (e.g. "f(x) = x^2 + 1", "y = 0") get wrapped in
+    // inline $...$ math, everything else — including the ** markers — is
+    // untouched.
     const result = [];
 
     for (const line of lines) {
@@ -414,6 +466,19 @@
 
       const trimmed = line.trim();
       if (!trimmed) {
+        result.push(line);
+        continue;
+      }
+
+      // A standalone "$$" (or "$") line toggles whether we're inside an
+      // explicit multi-line math block the model wrote itself.
+      if (trimmed === "$$" || trimmed === "$") {
+        inMathBlock = !inMathBlock;
+        result.push(line);
+        continue;
+      }
+      if (inMathBlock) {
+        // Leave content inside an explicit block untouched — see FIX 9b.
         result.push(line);
         continue;
       }
@@ -436,6 +501,18 @@
         trimmed.startsWith("\\[")
       ) {
         result.push(line);
+        continue;
+      }
+
+      // Mixed prose + markdown-formatted line: don't swallow the whole
+      // thing into math (see FIX 8). Only wrap the equation-like clauses.
+      if (MD_EMPHASIS_PATTERN.test(line)) {
+        if (latexLinePattern.test(line) && !/\$/.test(line)) {
+          const wrapped = line.replace(INLINE_CLAUSE_PATTERN, (clause) => `$${clause.trim()}$`);
+          result.push(wrapped);
+        } else {
+          result.push(line);
+        }
         continue;
       }
 
