@@ -218,14 +218,32 @@
    * streaming, so it stays cheap (no fixed-size buffers, direct innerHTML).
    */
   function renderMarkdownInto(bubbleEl, markdownText) {
-    // FIX 3: Pipeline order — strip stray HTML tags first, then auto-wrap
-    // bare LaTeX, then parse Markdown, then render any $...$ / $$...$$ math.
-    // Previously autoWrapBareLatex ran before normalizeHtmlTags, so bare HTML
-    // leaked through into the KaTeX pass and produced visible <br>, <ul>, <li>
-    // tags and garbled word spacing in the rendered output.
+    // Pipeline order matters:
+    //   1. strip stray HTML tags
+    //   2. auto-wrap bare LaTeX (no $ delimiters) into $$...$$
+    //   3. pre-render every $...$ / $$...$$ / \(...\) / \[...\] expression
+    //      to KaTeX HTML *before* Markdown parsing, swapping each one for a
+    //      one-token placeholder span
+    //   4. run marked.parse + DOMPurify as before (placeholders are inert
+    //      plain HTML, so Markdown can't split them across list items or
+    //      paragraphs)
+    //   5. swap the placeholders back for the real KaTeX markup
+    //
+    // FIX 7: The previous approach ran KaTeX's renderMathInElement *after*
+    // Markdown had already turned the source into HTML. When an equation
+    // like "$$\n1. (x^2 - 5x + 6)\n$$" sat next to a numbered list, marked
+    // split it into separate <p>/<ol><li> elements — e.g. "$$" alone in one
+    // paragraph and "1. (x^2 - 5x + 6)" in a list item, with the closing
+    // "$$" in a third node. KaTeX's auto-render only matches delimiters
+    // that live in the same text node, so it silently gave up, leaving the
+    // literal "$$" markers and un-rendered "x^2" visible in the chat — the
+    // exact bug in the screenshot. Rendering to KaTeX HTML first and
+    // stashing the result behind an atomic placeholder sidesteps that
+    // entirely: Markdown can no longer split an equation it never sees.
     const cleanedMarkdown = normalizeHtmlTags(markdownText);
     const latexWrapped    = autoWrapBareLatex(cleanedMarkdown);
-    const rawHtml         = marked.parse(latexWrapped);
+    const { text: mathMasked, mathBlocks } = extractMath(latexWrapped);
+    const rawHtml         = marked.parse(mathMasked);
     bubbleEl.innerHTML    = DOMPurify.sanitize(rawHtml, {
       // Allow KaTeX's span/classes and some mathml tags so math renders
       // correctly and stays inside the bubble instead of breaking out.
@@ -237,19 +255,22 @@
         "details", "summary", "pre", "code", "br"
       ],
       ADD_ATTR: ["target", "class", "style", "aria-hidden", "role",
-                 "xmlns", "encoding", "columnalign", "open"],
+                 "xmlns", "encoding", "columnalign", "open", "data-math-id"],
     });
+
+    // Swap the placeholder spans for the real, pre-rendered KaTeX markup.
+    injectMath(bubbleEl, mathBlocks);
+
     // If the original markdown contained LaTeX, add a small collapsible
     // preview showing the raw LaTeX source so users can inspect it.
     try {
-      const mathMatches = Array.from(latexWrapped.matchAll(/\$\$[\s\S]+?\$\$|\$[^\n$]+?\$/g)).map(m => m[0]);
-      if (mathMatches.length) {
+      if (mathBlocks.length) {
         const details = document.createElement("details");
         details.className = "latex-preview";
         const summary = document.createElement("summary");
         summary.textContent = "LaTeX source";
         const pre = document.createElement("pre");
-        pre.textContent = mathMatches.join("\n\n");
+        pre.textContent = mathBlocks.map((b) => b.source).join("\n\n");
         details.appendChild(summary);
         details.appendChild(pre);
         bubbleEl.appendChild(details);
@@ -258,9 +279,78 @@
       // no-op if regex or DOM operations fail in edge cases
     }
 
-    // Render LaTeX in the sanitized DOM (use KaTeX's auto-render if present),
-    // otherwise fall back to katex.renderToString on the sanitized HTML.
+    // Safety net: if window.katex wasn't ready yet when extractMath ran
+    // (script race on the very first chunk), fall back to auto-render so
+    // math still shows up once KaTeX finishes loading.
     renderLatexInto(bubbleEl);
+  }
+
+  /**
+   * Finds every LaTeX expression in raw markdown text — $$...$$, $...$,
+   * \[...\], \(...\) — and pre-renders each one to KaTeX HTML via
+   * katex.renderToString, replacing it in the text with a small inert
+   * placeholder span. This must run *before* marked.parse so Markdown's
+   * block/list parser never gets a chance to split a single equation
+   * across multiple elements (see FIX 7 above for why that mattered).
+   *
+   * Code spans and fenced code blocks are masked out first so a literal
+   * "$" inside a code sample (shell prompts, variable names, etc.) is
+   * never mistaken for math.
+   */
+  function extractMath(text) {
+    const mathBlocks = [];
+    if (!window.katex || typeof window.katex.renderToString !== "function") {
+      return { text, mathBlocks };
+    }
+
+    // Temporarily pull out fenced code blocks and inline code so their
+    // contents are never treated as math.
+    const codeStash = [];
+    let masked = text.replace(/```[\s\S]*?```|`[^`\n]*`/g, (m) => {
+      const idx = codeStash.push(m) - 1;
+      return `\u0000CODE${idx}\u0000`;
+    });
+
+    const mathPattern = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$([^\n$]+?)\$/g;
+
+    masked = masked.replace(mathPattern, (match, dollarDisplay, bracketDisplay, parenInline, dollarInline) => {
+      const isDisplay = dollarDisplay !== undefined || bracketDisplay !== undefined;
+      const source = (dollarDisplay ?? bracketDisplay ?? parenInline ?? dollarInline ?? "").trim();
+      if (!source) return match;
+
+      let html;
+      try {
+        html = window.katex.renderToString(source, {
+          displayMode: isDisplay,
+          throwOnError: false,
+        });
+      } catch (err) {
+        return match; // leave the raw text if KaTeX chokes on it
+      }
+
+      const id = mathBlocks.length;
+      mathBlocks.push({ id, source, display: isDisplay, html });
+      return `<span class="math-placeholder" data-math-id="${id}"></span>`;
+    });
+
+    // Put the protected code snippets back.
+    masked = masked.replace(/\u0000CODE(\d+)\u0000/g, (_, i) => codeStash[Number(i)]);
+
+    return { text: masked, mathBlocks };
+  }
+
+  /**
+   * Replaces each `<span data-math-id="N">` placeholder left by
+   * extractMath() with its real, pre-rendered KaTeX HTML. The HTML is
+   * trusted here because it was generated locally by katex.renderToString,
+   * not injected verbatim from the model's output.
+   */
+  function injectMath(bubbleEl, mathBlocks) {
+    if (!mathBlocks || !mathBlocks.length) return;
+    mathBlocks.forEach(({ id, html }) => {
+      const placeholder = bubbleEl.querySelector(`[data-math-id="${id}"]`);
+      if (placeholder) placeholder.outerHTML = html;
+    });
   }
 
   /**
