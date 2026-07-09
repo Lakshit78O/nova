@@ -199,6 +199,11 @@ body.chat-body {
   font-size: 0.85em;
 }
 
+/* LaTeX preview styling */
+.latex-preview { margin-top: 0.5rem; font-size: 0.85rem; color: var(--ink-soft); }
+.latex-preview summary { cursor: pointer; font-weight: 600; }
+.latex-preview pre { background: var(--paper); padding: 8px; border-radius: 6px; margin: 8px 0 0 0; overflow:auto; }
+
 /* Code blocks with a copy button */
 .code-block { position: relative; margin: 12px 0; }
 .code-block pre {

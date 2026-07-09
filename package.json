@@ -1,0 +1,27 @@
+{
+  "name": "nova",
+  "version": "1.0.0",
+  "description": "A minimalist white-and-red chat app. Every file — frontend and backend — runs as-is. **No npm, no `npm install`, no `node_modules`, no `package.json`.**",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lakshit78O/nova.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Lakshit78O/nova/issues"
+  },
+  "homepage": "https://github.com/Lakshit78O/nova#readme",
+  "dependencies": {
+    "dompurify": "^3.4.11",
+    "jsdom": "^29.1.1",
+    "katex": "^0.17.0",
+    "marked": "^18.0.5"
+  }
+}

@@ -235,8 +235,27 @@
       ADD_ATTR: ["target", "class", "style", "aria-hidden", "role",
                  "xmlns", "encoding", "columnalign"],
     });
-    // Render LaTeX in the sanitized DOM (use KaTeX's auto-render), rather
-    // than pre-rendering to HTML strings which can introduce stray tags.
+    // If the original markdown contained LaTeX, add a small collapsible
+    // preview showing the raw LaTeX source so users can inspect it.
+    try {
+      const mathMatches = Array.from(latexWrapped.matchAll(/\$\$[\s\S]+?\$\$|\$[^\n$]+?\$/g)).map(m => m[0]);
+      if (mathMatches.length) {
+        const details = document.createElement("details");
+        details.className = "latex-preview";
+        const summary = document.createElement("summary");
+        summary.textContent = "LaTeX source";
+        const pre = document.createElement("pre");
+        pre.textContent = mathMatches.join("\n\n");
+        details.appendChild(summary);
+        details.appendChild(pre);
+        bubbleEl.appendChild(details);
+      }
+    } catch (e) {
+      // no-op if regex or DOM operations fail in edge cases
+    }
+
+    // Render LaTeX in the sanitized DOM (use KaTeX's auto-render if present),
+    // otherwise fall back to katex.renderToString on the sanitized HTML.
     renderLatexInto(bubbleEl);
   }
 
@@ -305,6 +324,16 @@
         continue;
       }
 
+      // Handle common LLM output where LaTeX is wrapped in square brackets:
+      // e.g. "[ \\sin \\theta = \\frac{8}{17} ]" -> treat as display math.
+      const bracketMath = trimmed.match(/^\[\s*([\s\S]*\\[A-Za-z0-9]|[\^_]|\\frac|\\sqrt)[\s\S]*\s*\]$/);
+      if (bracketMath) {
+        // extract inner content without the surrounding brackets
+        const inner = trimmed.replace(/^\[\s*|\s*\]$/g, "").trim();
+        result.push(`\n$$\n${inner}\n$$\n`);
+        continue;
+      }
+
       // Skip lines already wrapped in standard math delimiters.
       if (
         trimmed.startsWith("$$") ||
@@ -335,43 +364,42 @@
    * using KaTeX within the given element.
    */
   function renderLatexInto(element) {
-    if (!window.renderMathInElement) return;
+    const mathOptions = {
+      delimiters: [
+        { left: "$$", right: "$$", display: true  },
+        { left: "$",  right: "$",  display: false },
+        { left: "\\(", right: "\\)", display: false },
+        { left: "\\[", right: "\\]", display: true  },
+      ],
+      throwOnError: false,
+      ignoredTags: ["script", "noscript", "style", "textarea", "code", "pre"],
+    };
 
-    // Only process text nodes that are outside <pre>/<code> blocks.
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        if (!node.nodeValue || !node.nodeValue.includes("$")) return NodeFilter.FILTER_REJECT;
-        const parent = node.parentElement;
-        if (!parent) return NodeFilter.FILTER_REJECT;
-        if (parent.closest("pre, code")) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      },
-    });
-
-    const textNodes = [];
-    while (walker.nextNode()) textNodes.push(walker.currentNode);
-
-    textNodes.forEach((textNode) => {
-      const wrapper = document.createElement("span");
-      wrapper.textContent = textNode.nodeValue;
-      try {
-        renderMathInElement(wrapper, {
-          delimiters: [
-            { left: "$$", right: "$$", display: true  },
-            { left: "$",  right: "$",  display: false },
-            { left: "\\(", right: "\\)", display: false },
-            { left: "\\[", right: "\\]", display: true  },
-          ],
-          throwOnError: false,
-          ignoredTags: ["script", "noscript", "style", "textarea", "code", "pre"],
-        });
-        if (wrapper.innerHTML !== textNode.nodeValue) {
-          textNode.parentNode.replaceChild(wrapper, textNode);
-        }
-      } catch (err) {
-        // Leave the original text if KaTeX rendering fails.
+    // Prefer KaTeX's auto-render if the page loaded it.
+    try {
+      if (typeof window.renderMathInElement === "function") {
+        window.renderMathInElement(element, mathOptions);
+        return;
       }
-    });
+
+      // Fallback: if katex.renderToString is available, replace math
+      // delimiters directly inside the sanitized HTML. This keeps markup
+      // contained because we sanitized earlier and allowed KaTeX spans.
+      if (window.katex && typeof window.katex.renderToString === "function") {
+        const mathRe = /\$\$([\s\S]+?)\$\$|\$([^\n$]+?)\$/g;
+        element.innerHTML = element.innerHTML.replace(mathRe, (match, displayMath, inlineMath) => {
+          const source = (displayMath || inlineMath || "").trim();
+          try {
+            return window.katex.renderToString(source, { displayMode: Boolean(displayMath), throwOnError: false });
+          } catch (err) {
+            return match;
+          }
+        });
+        return;
+      }
+    } catch (err) {
+      // If rendering fails, silently leave the original markdown/text.
+    }
   }
 
   /**
